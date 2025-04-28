@@ -18,6 +18,8 @@ public class CalculatorController {
     private boolean hasOperator = false;
     private boolean errorState = false;
 
+    private static final String OPERATORS = "+-*/";
+
     @FXML
     private void handleClear() {
         firstOperand = 0;
@@ -31,32 +33,50 @@ public class CalculatorController {
 
     @FXML
     private void handleEquals() {
-        if (errorState) {
-            return;
-        }
+        if (errorState) return;
 
         if (!currentOperator.isEmpty() && hasOperator) {
-            String input = display.getText();
-            String[] parts = input.split("[-+*/]");
-            if (parts.length == 2) {
-                try {
-                    double secondOperand = Double.parseDouble(parts[1]);
-                    double result = calculate(firstOperand, secondOperand, currentOperator);
-                    if (!Double.isFinite(result)) {
-                        showError("Error: Division by zero");
-                        return;
-                    }
-                    display.setText(formatResult(result));
-                    resultField.setText("");
-                    firstOperand = result;
-                    currentOperator = "";
-                    hasOperator = false;
-                    startNewInput = true;
-                } catch (NumberFormatException e) {
-                    showError("Invalid input");
+            try {
+                double[] operands = parseOperands(display.getText());
+                double result = calculate(operands[0], operands[1], currentOperator);
+
+                if (!Double.isFinite(result)) {
+                    showError("Error: Division by zero");
+                    return;
                 }
+
+                display.setText(formatResult(result));
+                resultField.setText("");
+                firstOperand = result;
+                currentOperator = "";
+                hasOperator = false;
+                startNewInput = true;
+
+            } catch (Exception e) {
+                showError("Invalid input");
             }
         }
+    }
+
+    private double[] parseOperands(String input) throws NumberFormatException {
+        int opIndex = -1;
+
+        for (int i = 1; i < input.length(); i++) {
+            char ch = input.charAt(i);
+            if (OPERATORS.contains(Character.toString(ch))) {
+                opIndex = i;
+                break;
+            }
+        }
+
+        if (opIndex == -1 || opIndex == input.length() - 1) {
+            throw new NumberFormatException("Incomplete expression");
+        }
+
+        double a = Double.parseDouble(input.substring(0, opIndex));
+        double b = Double.parseDouble(input.substring(opIndex + 1));
+
+        return new double[]{a, b};
     }
 
     private String formatResult(double result) {
@@ -77,7 +97,7 @@ public class CalculatorController {
             case "*":
                 return a * b;
             case "/":
-                return a / b; // Division by zero check is handled by Double.isFinite()
+                return a / b;
             default:
                 return b;
         }
@@ -98,12 +118,11 @@ public class CalculatorController {
 
         String currentText = display.getText();
         if (!currentText.isEmpty()) {
-            // If deleting an operator, update flags
-            if ("+-*/".contains(currentText.substring(currentText.length()-1))) {
+            if ("+-*/".contains(currentText.substring(currentText.length() - 1))) {
                 hasOperator = false;
                 currentOperator = "";
             }
-            display.setText(currentText.substring(0, currentText.length()-1));
+            display.setText(currentText.substring(0, currentText.length() - 1));
         }
     }
 
@@ -115,7 +134,6 @@ public class CalculatorController {
         }
 
         String currentText = display.getText();
-        // Only allow decimal if the current number doesn't already have one
         if (currentText.isEmpty() || startNewInput) {
             display.setText("0.");
             startNewInput = false;
@@ -135,16 +153,25 @@ public class CalculatorController {
         String newOperator = button.getText();
         String currentText = display.getText();
 
-        if (!currentText.isEmpty()) {
-            // If we already have an operator, calculate intermediate result
-            if (hasOperator) {
-                handleEquals();
-                if (errorState) {
-                    return;
-                }
+        if (!currentText.isEmpty() || (currentText.isEmpty() && newOperator.equals("-"))) {
+
+            if (currentText.isEmpty() && newOperator.equals("-")) {
+                display.setText("-");
+                startNewInput = false;
+                return;
             }
 
-            // Set the new operator
+            if (hasOperator && "+-*/".contains(currentText.substring(currentText.length() - 1))) {
+                display.setText(currentText.substring(0, currentText.length() - 1) + newOperator);
+                currentOperator = newOperator;
+                return;
+            }
+
+            if (hasOperator) {
+                handleEquals();
+                if (errorState) return;
+            }
+
             try {
                 firstOperand = Double.parseDouble(display.getText());
                 currentOperator = newOperator;
@@ -166,34 +193,25 @@ public class CalculatorController {
         Button button = (Button) event.getSource();
         String digit = button.getText();
 
-        if (startNewInput) {
-            if (hasOperator) {
-                // Continuing expression after operator
-                display.setText(display.getText() + digit);
-            } else {
-                // Starting new number
-                display.setText(digit);
-            }
-            startNewInput = false;
+        if (startNewInput && !hasOperator) {
+            display.setText(digit);
         } else {
             display.setText(display.getText() + digit);
         }
+        startNewInput = false;
 
-        // Update result field with current calculation if we have an operator
         if (hasOperator && !errorState) {
-            String[] parts = display.getText().split("[-+*/]");
-            if (parts.length == 2) {
-                try {
-                    double secondOperand = Double.parseDouble(parts[1]);
-                    double result = calculate(firstOperand, secondOperand, currentOperator);
-                    if (!Double.isFinite(result)) {
-                        resultField.setText("Error: Division by zero");
-                    } else {
-                        resultField.setText(formatResult(result));
-                    }
-                } catch (NumberFormatException e) {
-                    // Ignore incomplete numbers
+            try {
+                double[] operands = parseOperands(display.getText());
+                double result = calculate(operands[0], operands[1], currentOperator);
+
+                if (!Double.isFinite(result)) {
+                    resultField.setText("Error: Division by zero");
+                } else {
+                    resultField.setText(formatResult(result));
                 }
+            } catch (Exception e) {
+                // Ignore incomplete numbers
             }
         }
     }
